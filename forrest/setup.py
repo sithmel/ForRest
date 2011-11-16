@@ -27,9 +27,7 @@ setup(name='forrest',
       entry_points="""
       # -*- Entry points: -*-
       [paste.app_factory]
-      fs = forrest.resources.fs:make_app_wsgi
-      filedict = forrest.resources.filedict:make_app_wsgi
-      ramdict = forrest.resources.ramdict:make_app_wsgi
+      main = forrest.wsgi_app:make_app
       
       """,
       )

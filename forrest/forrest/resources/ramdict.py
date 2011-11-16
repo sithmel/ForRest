@@ -6,7 +6,7 @@ from StringIO import StringIO
 from contextlib import closing
 
 class RamDict(object):
-    def __init__(self):
+    def __init__(self, **config):
         self.data = {}
 
     def _title2id(self, title, mime):
@@ -55,9 +55,5 @@ class RamDict(object):
     def etag(self, key):
         return md5(self.data[key]).hexdigest()
         
-def make_app_wsgi(global_conf, **kw):
-    conf = global_conf.copy()
-    conf.update(kw)
-    conf['resources'] = RamDict()
-    return RestApp(conf)
+
         

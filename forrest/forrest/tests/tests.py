@@ -224,7 +224,7 @@ class TestFileDict(TestBaseDict):
 
     def setUp(self):
         os.remove('test.dat')
-        self.d = filedict.FileDict('test.dat')
+        self.d = filedict.FileDict(path='test.dat')
         self.d.data['test.txt'] = 'this is a test'
 
     def tearDown(self):
@@ -236,7 +236,7 @@ class TestFs(unittest.TestCase):
     def setUp(self):
         path = os.path.join(os.path.dirname(__file__), 'resources')
     
-        self.d = fs.FileSystem(path)
+        self.d = fs.FileSystem(path=path)
         
     def testGetResource(self):
         self.assertEqual(self.d.get('test.txt')[0].read(), 'this is a test\n')

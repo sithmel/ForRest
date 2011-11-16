@@ -16,8 +16,8 @@ from StringIO import StringIO
 from contextlib import closing
 
 class FileSystem(object):
-    def __init__(self, root):
-        self.root = root
+    def __init__(self, **config):
+        self.root = config['path']
         self.etags = {}
         # prebuild the dict
         for root, dirs, files in os.walk(self.root):
@@ -125,14 +125,5 @@ class FileSystem(object):
             return None
         return self.etags[filename]
 
-def make_app_wsgi(global_conf, path, **kw):
-    conf = global_conf.copy()
-    conf.update(kw)
-    p = os.path
 
-    if not p.isabs(path):
-        path = p.normpath(p.join(p.dirname(global_conf['__file__']), path))
-
-    conf['resources'] = FileSystem(path)
-    return RestApp(conf)
 

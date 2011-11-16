@@ -8,8 +8,8 @@ from forrest.app import RestApp
 from contextlib import closing
 
 class FileDict(object):
-    def __init__(self, root):
-        self.root = root
+    def __init__(self, **config):
+        self.root = config['path']
         self.data = shelve.open(self.root)
         self.lock = threading.Lock()
 
@@ -64,14 +64,5 @@ class FileDict(object):
     def close(self):
         self.data.close()
         
-def make_app_wsgi(global_conf, path, **kw):
-    conf = global_conf.copy()
-    conf.update(kw)
-    p = os.path
 
-    if not p.isabs(path):
-        path = p.normpath(p.join(p.dirname(global_conf['__file__']), path))
-
-    conf['resources'] = FileDict(path)
-    return RestApp(conf)
         
