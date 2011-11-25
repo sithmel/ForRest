@@ -2,7 +2,8 @@ __doc__ = """
 This is a very simple and naive implementation of a tree of resources.
 The api is designed work fine with backbone.js
 It seems a dictionary with a few key differences: 
- - the keys and values are strings
+ - the keys are strings (they maps itself on urls)
+ - the values are a file object
  - You must request a new key before assign a value
  - every resource has an etag and mimetype
 """
@@ -18,6 +19,7 @@ from contextlib import closing
 class FileSystem(object):
     def __init__(self, **config):
         self.root = config['path']
+        self.index_html = config.get('index_html')
         self.etags = {}
         # prebuild the dict
         for root, dirs, files in os.walk(self.root):
@@ -28,6 +30,8 @@ class FileSystem(object):
                         self.etags[fullpath] = md5(f.read()).hexdigest()
 
     def _getFilename(self, fn):
+        if not fn and self.index_html:
+            return os.path.join(self.root, self.index_html)
         return os.path.join(self.root, fn.lstrip(os.path.sep))
 
     def _title2id(self, title, mime):
@@ -109,7 +113,7 @@ class FileSystem(object):
         return newid
 
     def _getMimeType(self, filename):
-        return mimetypes.guess_type(filename)[0]
+        return mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
     def mime(self, key):
         filename = self._getFilename(key)

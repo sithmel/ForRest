@@ -3,6 +3,7 @@ import os.path
 from forrest.resources import fs, filedict, ramdict
 from forrest import app
 from StringIO import StringIO
+from forrest.auth_middleware  import Auth, auth
 
 class MockResource(object):
     def new(self, parent, title, mime):
@@ -311,8 +312,114 @@ class TestFs(unittest.TestCase):
         with self.assertRaises(KeyError):
             s = self.d.get('folder/xxx.js')
         
-        #get
+class TestAuth(unittest.TestCase):
+    
+    def test_auth_user(self):
+        app = None
+        users = [ 'maurizio : password1:group1 group2', ' jonathan:password2 :']
+        rules = []
+        auth = Auth(app, users, rules)
+        
+        self.assertTrue('maurizio' in auth.users)
+        self.assertTrue('jonathan' in auth.users)
+        self.assertEquals(auth.users['maurizio'], 'password1')
+        self.assertEquals(auth.users['jonathan'], 'password2')
+
+    def test_auth_group(self):
+        app = None
+        users = [ 'maurizio : password1:group1 group2', ' jonathan:password2 : group1']
+        rules = []
+        auth = Auth(app, users, rules)
    
+        self.assertTrue('group1' in auth.groups['maurizio'])
+        self.assertTrue('group2' in auth.groups['maurizio'])
+
+        self.assertTrue('group1' in auth.groups['jonathan'])
+        self.assertTrue('group2' not in auth.groups['jonathan'])
+
+    def test_auth_rules(self):
+        app = None
+        users = [ 'maurizio : password1:group1 group2', ' jonathan:password2 : group1']
+        rules = ['/res :get : group1 ',':*:group2','/static:error:*']
+        auth = Auth(app, users, rules)
+        self.assertTrue(len(auth.rules), 3)
+        self.assertEquals(auth.rules[0][0], '/res')
+        self.assertEquals(auth.rules[1][0], '')
+        self.assertEquals(auth.rules[2][0], '/static')
+
+        self.assertTrue('get' in auth.rules[0][1])
+        self.assertTrue('delete' not in auth.rules[0][1])
+        self.assertTrue('get' in auth.rules[1][1])
+        self.assertTrue('post' in auth.rules[1][1])
+        self.assertTrue('put' in auth.rules[1][1])
+        self.assertTrue('delete' in auth.rules[1][1])
+
+        self.assertTrue('error' not in auth.rules[2][1])
+
+        self.assertTrue('group1' in auth.rules[0][2])
+        self.assertTrue('group2' not in auth.rules[0][2])
+
+        self.assertTrue('group2' in auth.rules[1][2])
+
+        self.assertTrue('group1' in auth.rules[2][2])
+        self.assertTrue('group2' in auth.rules[2][2])
+
+class TestAuth2(unittest.TestCase):
+    def setUp(self):
+        from hashlib import md5
+        password = md5('password').hexdigest()
+        self.env = {}
+        self.env['AUTH.USERS'] = {'admin':password, 'jon_snow':password, 'arya_stark':password}
+        self.env['AUTH.GROUPS'] = {'admin':set(['starks', 'nightswatch']), 'jon_snow':set(['nightswatch']), 'arya_stark':set(['starks'])}
+        self.env['AUTH.RULES'] = [
+            ('/', set(['get']), set(['starks', 'nightswatch'])),
+            ('/winterfell', set(['put', 'post', 'delete']), set(['starks'])),
+            ('/castleblack', set(['put', 'post']), set(['nightswatch']))
+        ]
+    def test_wrong_password(self):
+        self.env['PATH_INFO'] = ''
+        self.env['REQUEST_METHOD'] = 'get'
+        
+        self.assertFalse(auth(self.env, 'admin', 'wrong'))
+
+    def test_wrong_url(self):
+        self.env['PATH_INFO'] = 'xxx'
+        self.env['REQUEST_METHOD'] = 'get'
+        self.assertFalse(auth(self.env, 'admin', 'password'))
+        self.env['REQUEST_METHOD'] = 'put'
+        self.assertFalse(auth(self.env, 'admin', 'password'))
+
+    def test_admin_url(self):
+        self.env['PATH_INFO'] = '/test'
+        self.env['REQUEST_METHOD'] = 'get'
+        self.assertTrue(auth(self.env, 'admin', 'password'))
+
+        self.env['PATH_INFO'] = '/winterfell'
+        self.env['REQUEST_METHOD'] = 'get'
+        self.assertTrue(auth(self.env, 'admin', 'password'))
+
+        self.env['PATH_INFO'] = '/winterfell/x'
+        self.env['REQUEST_METHOD'] = 'post'
+        self.assertTrue(auth(self.env, 'admin', 'password'))
+
+    def test_user_url(self):
+        self.env['PATH_INFO'] = '/test'
+        self.env['REQUEST_METHOD'] = 'get'
+        self.assertTrue(auth(self.env, 'jon_snow', 'password'))
+
+        self.env['PATH_INFO'] = '/winterfell'
+        self.env['REQUEST_METHOD'] = 'get'
+        self.assertTrue(auth(self.env, 'jon_snow', 'password'))
+
+        self.env['PATH_INFO'] = '/winterfell'
+        self.env['REQUEST_METHOD'] = 'post'
+        self.assertFalse(auth(self.env, 'jon_snow', 'password'))
+
+        self.env['PATH_INFO'] = '/castleblack'
+        self.env['REQUEST_METHOD'] = 'post'
+        self.assertTrue(auth(self.env, 'jon_snow', 'password'))
+
+
 #def suite():
 #    suite = unittest.TestSuite()
 #    suite.addTest(unittest.makeSuite(TestGet))

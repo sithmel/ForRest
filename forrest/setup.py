@@ -28,6 +28,8 @@ setup(name='forrest',
       # -*- Entry points: -*-
       [paste.app_factory]
       main = forrest.wsgi_app:make_app
-      
+      [paste.filter_app_factory]
+      auth = forrest.auth_middleware:make_auth_middleware
+
       """,
       )

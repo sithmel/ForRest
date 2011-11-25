@@ -55,7 +55,7 @@ class FileDict(object):
 
     def mime(self, key):
         if key in self.data:
-            return mimetypes.guess_type(key)[0]
+            return mimetypes.guess_type(key)[0] or 'application/octet-stream'
         raise KeyError, 'not found'
 
     def etag(self, key):
