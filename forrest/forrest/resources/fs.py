@@ -14,11 +14,11 @@ from hashlib import md5
 import mimetypes
 from forrest.app import RestApp
 from StringIO import StringIO
-from contextlib import closing
+import json
 
 class FileSystem(object):
     def __init__(self, **config):
-        self.root = config['path']
+        self.root = config['path'].replace('/',os.path.sep)
         self.index_html = config.get('index_html')
         self.etags = {}
         # prebuild the dict
@@ -30,18 +30,19 @@ class FileSystem(object):
                         self.etags[fullpath] = md5(f.read()).hexdigest()
 
     def _getFilename(self, fn):
+        fn = fn.replace('/',os.path.sep)
         if not fn and self.index_html:
             return os.path.join(self.root, self.index_html)
         return os.path.join(self.root, fn.lstrip(os.path.sep))
 
     def _title2id(self, title, mime):
         if not title:
-            return 'item'
+            title = u'item'
         if not isinstance(title, unicode):
             title = unicode(title, 'utf-8')
         s = title.encode('ascii', 'ignore')
         s = s.translate(None,'''!"#$%&\'()*+,/:;<=>?@[\\]^`{|}~''')
-        extension = mimetypes.guess_extension(mime) or ""
+        extension = self._guessExtension(mime) or ""
         return "-".join(s.split()) + extension
 
     def get(self, key, options=None):
@@ -52,7 +53,7 @@ class FileSystem(object):
             pass
         data = []
         try:
-            ls = os.listdir(filename)
+            ls = sorted(os.listdir(filename))
         except:
             raise KeyError, 'not found'
         for fname in ls: # throw OSError
@@ -71,21 +72,29 @@ class FileSystem(object):
         content = '[' + ','.join(data) + ']'
         return StringIO(content), len(content)
 
-    def set(self, key, stream, length):
+    def set(self, key, stream, length, mime):
         filename = self._getFilename(key)
         if filename not in self.etags:
-            raise KeyError
+            raise KeyError, "key not found"
+
+#        if mime != self._getMimeType(filename):
+#            raise KeyError, 'Resource mime changes are not admitted'
+
         try:
-
-            with closing(stream):
-                value = stream.read(length)
-
+            value = 'json' in mime.lower() and self._insertId(stream.read(length), os.path.basename(key)) or stream.read(length)
             with open(filename, 'wb') as f: # throw IOError
                 f.write(value)
             self.etags[filename] = md5(value).hexdigest()
         except IOError:
-            raise KeyError, 'not found'
+            raise KeyError, 'File not found'
+        except ValueError:
+            raise KeyError, 'not a valid JSON'
         
+    def _insertId(self, value, key):
+        obj = json.loads(value)
+        obj['id'] = key
+        return json.dumps(obj)
+
     def delete(self, key):
         filename = self._getFilename(key)
         try:
@@ -113,7 +122,16 @@ class FileSystem(object):
         return newid
 
     def _getMimeType(self, filename):
+        if filename.lower().endswith('.json'):
+            return 'application/json'
         return mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+
+    def _guessExtension(self, mime):
+        """windows doesn't know application/json (sad face)"""
+        if 'json' in mime:
+            return '.json'
+        return mimetypes.guess_extension(mime) or ""
+
 
     def mime(self, key):
         filename = self._getFilename(key)

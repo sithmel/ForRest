@@ -4,8 +4,7 @@ import mimetypes
 import os.path
 import threading
 from StringIO import StringIO
-from forrest.app import RestApp
-from contextlib import closing
+import json
 
 class FileDict(object):
     def __init__(self, **config):
@@ -16,7 +15,7 @@ class FileDict(object):
 
     def _title2id(self, title, mime):
         if not title:
-            return 'item'
+            title = 'item'
         if not isinstance(title, unicode):
             title = unicode(title, 'utf-8')
         s = title.encode('ascii', 'ignore')
@@ -28,15 +27,27 @@ class FileDict(object):
         value = self.data[key]
         return StringIO(value), len(value)
             
-    def set(self, key, stream, length):
+    def set(self, key, stream, length, mime):
         if key not in self.data:
-            raise KeyError, 'not found'
+            raise KeyError, "key not found"
 
-        with closing(stream):
-            value = stream.read(length)
+        if mime != self.mime(key):
+            raise KeyError, 'Resource mime changes are not admitted'
+
+        try:
+            value = 'json' in mime.lower() and self._insertId(stream.read(length), os.path.basename(key)) or stream.read(length)
+        except ValueError:
+            raise KeyError, 'not a valid JSON'
+
         with self.lock:            
             self.data[key] = value
             self.data.sync()
+
+    def _insertId(self, value, key):
+        obj = json.loads(value)
+        obj['id'] = key
+        return json.dumps(obj)
+
         
     def delete(self, key):
         del self.data[key]

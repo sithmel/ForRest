@@ -7,7 +7,7 @@ from forrest.auth_middleware  import Auth, auth
 
 class MockResource(object):
     def new(self, parent, title, mime):
-        if parent == 'folder':
+        if parent == '':
             return 'test.txt'
         raise KeyError
     def mime(self, key):
@@ -18,7 +18,9 @@ class MockResource(object):
         if key == 'test.txt':
             return StringIO('test.txt'), 8
         raise KeyError
-    def set(self, key, stream, length):
+    def set(self, key, stream, length, mime):
+        if mime != "text/plain":
+            raise KeyError
         if key != 'test.txt':
             raise KeyError
     def delete(self, key):
@@ -72,16 +74,16 @@ class TestWsgiApp(unittest.TestCase):
 
     def testPut(self):
         """put"""
-        output = consumeapp(self.app,{"REQUEST_METHOD":'PUT', 'PATH_INFO':'test.txt', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3'})
+        output = consumeapp(self.app,{"CONTENT_TYPE":"text/plain","REQUEST_METHOD":'PUT', 'PATH_INFO':'test.txt', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3'})
         self.assertEquals(output['status'], '200 OK')
-        self.assertEquals(output['content'], 'ok')
+        self.assertEquals(output['content'], '{}')
         self.assertTrue(output['headers']['Content-Length'], '2')
-        self.assertEquals(output['headers']['Content-Type'], 'text/plain')
+        self.assertEquals(output['headers']['Content-Type'], 'application/json')
         self.assertTrue('ETag' not in output['headers'])
 
     def testPut404(self):
         """put 404"""
-        output = consumeapp(self.app,{"REQUEST_METHOD":'PUT', 'PATH_INFO':'not exists.txt', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3'})
+        output = consumeapp(self.app,{"CONTENT_TYPE":"text/plain","REQUEST_METHOD":'PUT', 'PATH_INFO':'not exists.txt', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3'})
         self.assertEquals(output['status'], '404 NOT FOUND')
         self.assertEquals(output['content'], 'Not Found')
         self.assertEquals(output['headers']['Content-Length'], '9')
@@ -90,28 +92,37 @@ class TestWsgiApp(unittest.TestCase):
 
     def testPutNot412(self):
         """put etag"""
-        output = consumeapp(self.app,{"REQUEST_METHOD":'PUT', 'PATH_INFO':'test.txt', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3', 'HTTP_IF_MATCH':'etag'})
+        output = consumeapp(self.app,{"CONTENT_TYPE":"text/plain","REQUEST_METHOD":'PUT', 'PATH_INFO':'test.txt', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3', 'HTTP_IF_MATCH':'etag'})
         self.assertEquals(output['status'], '200 OK')
-        self.assertEquals(output['content'], 'ok')
+        self.assertEquals(output['content'], '{}')
         self.assertTrue(output['headers']['Content-Length'], '2')
-        self.assertEquals(output['headers']['Content-Type'], 'text/plain')
+        self.assertEquals(output['headers']['Content-Type'], 'application/json')
         self.assertTrue('ETag' not in output['headers'])
 
     def testPut412(self):
         """put etag"""
-        output = consumeapp(self.app,{"REQUEST_METHOD":'PUT', 'PATH_INFO':'test.txt', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3', 'HTTP_IF_MATCH':'xxxetag'})
+        output = consumeapp(self.app,{"CONTENT_TYPE":"text/plain","REQUEST_METHOD":'PUT', 'PATH_INFO':'test.txt', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3', 'HTTP_IF_MATCH':'xxxetag'})
         self.assertEquals(output['status'], '412 Precondition Failed')
         self.assertEquals(output['content'], 'Precondition Failed')
         self.assertTrue(output['headers']['Content-Length'], '19')
         self.assertEquals(output['headers']['Content-Type'], 'text/plain')
 
+    def testPutWrongMime(self):
+        """put etag"""
+        output = consumeapp(self.app,{"CONTENT_TYPE":"application/json","REQUEST_METHOD":'PUT', 'PATH_INFO':'test.txt', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3', 'HTTP_IF_MATCH':'etag'})
+        self.assertEquals(output['status'], '404 NOT FOUND')
+        self.assertEquals(output['content'], 'Not Found')
+        self.assertEquals(output['headers']['Content-Length'], '9')
+        self.assertEquals(output['headers']['Content-Type'], 'text/plain')
+        self.assertTrue('ETag' not in output['headers'])
+
     def testDelete(self):
         """DELETE"""
         output = consumeapp(self.app,{"REQUEST_METHOD":'DELETE', 'PATH_INFO':'test.txt'})
         self.assertEquals(output['status'], '200 OK')
-        self.assertEquals(output['content'], 'ok')
-        self.assertTrue(output['headers']['Content-Length'], '2')
-        self.assertEquals(output['headers']['Content-Type'], 'text/plain')
+        self.assertEquals(output['content'], '{"status":"ok"}')
+        self.assertTrue(output['headers']['Content-Length'], '15')
+        self.assertEquals(output['headers']['Content-Type'], 'application/json')
         self.assertTrue('ETag' not in output['headers'])
 
     def testDelete404(self):
@@ -127,9 +138,9 @@ class TestWsgiApp(unittest.TestCase):
         """DELETE etag"""
         output = consumeapp(self.app,{"REQUEST_METHOD":'DELETE', 'PATH_INFO':'test.txt','HTTP_IF_MATCH':'etag'})
         self.assertEquals(output['status'], '200 OK')
-        self.assertEquals(output['content'], 'ok')
-        self.assertTrue(output['headers']['Content-Length'], '2')
-        self.assertEquals(output['headers']['Content-Type'], 'text/plain')
+        self.assertEquals(output['content'], '{"status":"ok"}')
+        self.assertTrue(output['headers']['Content-Length'], '15')
+        self.assertEquals(output['headers']['Content-Type'], 'application/json')
         self.assertTrue('ETag' not in output['headers'])
 
     def testDelete412(self):
@@ -142,7 +153,7 @@ class TestWsgiApp(unittest.TestCase):
 
     def testPost(self):
         """post"""
-        output = consumeapp(self.app,{"REQUEST_METHOD":'POST', 'PATH_INFO':'folder', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3', 'SLUG':'test.txt'})
+        output = consumeapp(self.app,{"CONTENT_TYPE":"text/plain","REQUEST_METHOD":'POST', 'PATH_INFO':'', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3', 'SLUG':'test.txt'})
         self.assertEquals(output['status'], '201 Created')
         self.assertEquals(output['content'], '{"id":"test.txt"}')
         self.assertTrue(output['headers']['Content-Length'], '17')
@@ -151,7 +162,7 @@ class TestWsgiApp(unittest.TestCase):
         
     def testPost404(self):
         """post 404"""
-        output = consumeapp(self.app,{"REQUEST_METHOD":'POST', 'PATH_INFO':'wrong_folder', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3', 'SLUG':'test.txt'})
+        output = consumeapp(self.app,{"CONTENT_TYPE":"text/plain","REQUEST_METHOD":'POST', 'PATH_INFO':'wrong_folder', 'wsgi.input':StringIO('new'),'CONTENT_LENGTH':'3', 'SLUG':'test.txt'})
         self.assertEquals(output['status'], '404 NOT FOUND')
         self.assertEquals(output['content'], 'Not Found')
         self.assertEquals(output['headers']['Content-Length'], '9')
@@ -180,25 +191,25 @@ class TestBaseDict(unittest.TestCase):
 
     def testPut(self):
         with self.assertRaises(KeyError):
-            self.d.set('notexists.txt', StringIO('raise error'), len('raise error'))
+            self.d.set('notexists.txt', StringIO('raise error'), len('raise error'), 'text/plain')
         with self.assertRaises(KeyError):
-            self.d.set('folder', StringIO('raise error again'), len('raise error again'))
+            self.d.set('folder', StringIO('raise error again'), len('raise error again'), "text/plain")
 
         etag = self.d.etag('test.txt')
         original_stream, original_l = self.d.get('test.txt')
 
         original_content = original_stream.read(original_l)
-        self.d.set('test.txt', StringIO('this is a new string'), len('this is a new string'))
+        self.d.set('test.txt', StringIO('this is a new string'), len('this is a new string'), 'text/plain')
         self.assertTrue(etag != self.d.etag('test.txt'))
         self.assertTrue(self.d.get('test.txt')[0].read() == 'this is a new string')
-        self.d.set('test.txt', StringIO(original_content), len(original_content))
+        self.d.set('test.txt', StringIO(original_content), len(original_content), 'text/plain')
         self.assertTrue(etag == self.d.etag('test.txt'))
         self.assertTrue(self.d.get('test.txt')[0].read() == original_content)
         
 
     def testNewPutDelete(self):
         with self.assertRaises(KeyError):
-            self.d.set('folder/xxx.js', StringIO('raise error'), len('raise error'))
+            self.d.set('folder/xxx.js', StringIO('raise error'), len('raise error'), "text/plain")
 
         newid = self.d.new('folder', 'xxx', 'application/javascript')
 
@@ -208,7 +219,7 @@ class TestBaseDict(unittest.TestCase):
         self.assertEquals(newid,'xxx.js')
         self.assertEquals(newid2,'xxx1.js')
         self.assertEquals(newid3,'xxx2.js')
-        self.d.set('folder/xxx.js', StringIO('new text'), len('new text'))
+        self.d.set('folder/xxx.js', StringIO('new text'), len('new text'),  'application/javascript')
         self.d.delete('folder/xxx.js')
         with self.assertRaises(KeyError):
             s = self.d.get('folder/xxx.js')
@@ -276,19 +287,19 @@ class TestFs(unittest.TestCase):
 
     def testPut(self):
         with self.assertRaises(KeyError):
-            self.d.set('notexists.txt',StringIO('raise error'),11)
+            self.d.set('notexists.txt',StringIO('raise error'),11, 'text/plain')
         with self.assertRaises(KeyError):
-            self.d.set('folder',StringIO('raise error'),11)
+            self.d.set('folder',StringIO('raise error'),11, 'text/plain')
 
         etag = self.d.etag('test.txt')
         original_stream, original_l = self.d.get('test.txt')
         with original_stream:
             original_content = original_stream.read(original_l)
 
-        self.d.set('test.txt', StringIO('this is a new string'),len('this is a new string'))
+        self.d.set('test.txt', StringIO('this is a new string'),len('this is a new string'),  'text/plain')
         self.assertTrue(etag != self.d.etag('test.txt'))
         self.assertTrue(self.d.get('test.txt')[0].read() == 'this is a new string')
-        self.d.set('test.txt',StringIO(original_content), original_l)
+        self.d.set('test.txt',StringIO(original_content), original_l, 'text/plain')
         self.assertTrue(etag == self.d.etag('test.txt'))
         self.assertTrue(self.d.get('test.txt')[0].read() == original_content)
         
@@ -297,7 +308,7 @@ class TestFs(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.d.new('notexist', 'xxx', 'text/javascript')
         with self.assertRaises(KeyError):
-            self.d.set('folder/xxx.js',StringIO('raise error'), len('raise error'))
+            self.d.set('folder/xxx.js',StringIO('raise error'), len('raise error'), 'application/json')
 
         newid = self.d.new('folder', 'xxx', 'application/javascript')
 
@@ -307,7 +318,7 @@ class TestFs(unittest.TestCase):
         self.assertEquals(newid,'xxx.js')
         self.assertEquals(newid2,'xxx1.js')
         self.assertEquals(newid3,'xxx2.js')
-        self.d.set('folder/xxx.js', StringIO('new'), len('new'))
+        self.d.set('folder/xxx.js', StringIO('new'), len('new'),  'application/javascript')
         self.d.delete('folder/xxx.js')
         with self.assertRaises(KeyError):
             s = self.d.get('folder/xxx.js')

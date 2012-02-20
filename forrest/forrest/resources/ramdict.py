@@ -3,7 +3,7 @@ import mimetypes
 import os.path
 from forrest.app import RestApp
 from StringIO import StringIO
-from contextlib import closing
+import json
 
 class RamDict(object):
     def __init__(self, **config):
@@ -11,7 +11,7 @@ class RamDict(object):
 
     def _title2id(self, title, mime):
         if not title:
-            return 'item'
+            title = 'item'
         if not isinstance(title, unicode):
             title = unicode(title, 'utf-8')
         s = title.encode('ascii', 'ignore')
@@ -23,14 +23,25 @@ class RamDict(object):
         value = self.data[key]
         return StringIO(value), len(value)
 
-    def set(self, key, stream, length):
-        if key not in self.data:
-            raise KeyError, 'not found'
+    def set(self, key, stream, length, mime):
 
-        with closing(stream):
-            value = stream.read(length)
+        if key not in self.data:
+            raise KeyError, "key not found"
+
+        if mime != self.mime(key):
+            raise KeyError, 'Resource mime changes are not admitted'
+
+        try:
+            value = 'json' in mime.lower() and self._insertId(stream.read(length), os.path.basename(key)) or stream.read(length)
+        except ValueError:
+            raise KeyError, 'not a valid JSON'
 
         self.data[key] = value
+
+    def _insertId(self, value, key):
+        obj = json.loads(value)
+        obj['id'] = key
+        return json.dumps(obj)
 
     def delete(self, key):
         del self.data[key]

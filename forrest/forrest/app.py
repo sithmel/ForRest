@@ -79,7 +79,7 @@ class RestApp(object):
 
     def method_get(self, environ, start_response):
         input_etag = environ.get('HTTP_IF_NONE_MATCH')
-        name = environ['PATH_INFO'].lstrip('/')
+        name = environ['PATH_INFO'].strip('/')
 
         try:
             etag = self.resources.etag(name)
@@ -105,7 +105,7 @@ class RestApp(object):
         return send_file(contentstream)
 
     def method_delete(self, environ, start_response):
-        name = environ['PATH_INFO'].lstrip('/')
+        name = environ['PATH_INFO'].strip('/')
 
         input_etag = environ.get('HTTP_IF_MATCH')
 
@@ -122,15 +122,17 @@ class RestApp(object):
         except KeyError:
             return not_found(environ, start_response)
         status = '200 OK'
-        headers = [('Content-Type','text/plain'),
-                   ('Content-Length','2')]
+        content = '{"status":"ok"}'
+        headers = [('Content-Type','application/json'),
+                   ('Content-Length',str(len(content)))]
 
         start_response(status, headers)
-        return ['ok']
+        return [content]
 
     def method_put(self, environ, start_response):
-        name = environ['PATH_INFO'].lstrip('/')
+        name = environ['PATH_INFO'].strip('/')
         input_etag = environ.get('HTTP_IF_MATCH')
+        content_type = environ.get('CONTENT_TYPE','application/octet-stream').split(';',1)[0]
 
         try:
             etag = self.resources.etag(name)
@@ -141,36 +143,49 @@ class RestApp(object):
             return precondition_failed(environ, start_response)
 
         try:
-            self.resources.set(name, environ['wsgi.input'],int(environ.get('CONTENT_LENGTH','0')))
+            self.resources.set(name, environ['wsgi.input'],int(environ.get('CONTENT_LENGTH','0')), content_type)
         except KeyError:
             return not_found(environ, start_response)
 
-        headers = [('Content-Type','text/plain'),
-                   ('Content-Length','2')]
+
+        if content_type == "application/json":
+            contentstream, contentlength = self.resources.get(name)
+            content = send_file(contentstream)
+        else:
+            content = ['{}']
+            contentlength = len(content[0])
+
+        headers = [('Content-Type','application/json'),
+                   ('Content-Length',str(contentlength))]
         status = '200 OK'
         start_response(status, headers)
-        return ['ok']
+        return content
 
     def method_post(self, environ, start_response):
-
-        name = environ['PATH_INFO'].lstrip('/')
-        content_type = environ.get('CONTENT_TYPE','application/octet-stream')
+        name = environ['PATH_INFO'].strip('/')
+        content_type = environ.get('CONTENT_TYPE','application/octet-stream').split(';',1)[0]
 
         proposed_title = environ.get('SLUG',None)
 
         try:
             newid = self.resources.new(name, proposed_title, content_type)
-            self.resources.set(newid, environ['wsgi.input'],int(environ.get('CONTENT_LENGTH','0')))
+            newpath = name + '/' + newid
+            self.resources.set(newpath.lstrip('/'), environ['wsgi.input'],int(environ.get('CONTENT_LENGTH','0')), content_type)
         except KeyError:
             return not_found(environ, start_response)
 
         status = '201 Created'
-        content = '{"id":"%s"}' % newid
+        if content_type == "application/json":
+            contentstream, contentlength = self.resources.get(newpath)
+            content = send_file(contentstream)
+        else:
+            content = ['{"id":"%s"}' % newid, ]
+            contentlength = len(content[0])
         headers = [('Location',newid),
                    ('Content-Type','application/json'),
-                   ('Content-Length',str(len(content)))]
+                   ('Content-Length',str(contentlength))]
 
         start_response(status, headers)
-        return [content]
+        return content
 
             
